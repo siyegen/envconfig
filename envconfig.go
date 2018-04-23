@@ -123,7 +123,7 @@ func gatherInfo(prefix string, spec interface{}) ([]varInfo, error) {
 
 		if f.Kind() == reflect.Struct {
 			// honor Decode if present
-			if decoderFrom(f) == nil && setterFrom(f) == nil && textUnmarshaler(f) == nil && binaryUnmarshaler(f) == nil  {
+			if decoderFrom(f) == nil && setterFrom(f) == nil && textUnmarshaler(f) == nil && binaryUnmarshaler(f) == nil {
 				innerPrefix := prefix
 				if !ftype.Anonymous {
 					innerPrefix = info.Key
@@ -174,9 +174,11 @@ func CheckDisallowed(prefix string, spec interface{}) error {
 	return nil
 }
 
-// Process populates the specified struct based on environment variables
-func Process(prefix string, spec interface{}) error {
+// ProcessWithDev same as process but returns a slice of default values
+// that were tagged "dev" that were not set
+func ProcessWithDev(prefix string, spec interface{}) ([]varInfo, error) {
 	infos, err := gatherInfo(prefix, spec)
+	unsetDevDefaults := []varInfo{}
 
 	for _, info := range infos {
 
@@ -190,21 +192,25 @@ func Process(prefix string, spec interface{}) error {
 		}
 
 		def := info.Tags.Get("default")
-		if def != "" && !ok {
+		dev := info.Tags.Get("dev")
+		if def != "" && !ok { // this means we are setting the default
 			value = def
+			if isTrue(dev) {
+				unsetDevDefaults = append(unsetDevDefaults, info)
+			}
 		}
 
 		req := info.Tags.Get("required")
 		if !ok && def == "" {
 			if isTrue(req) {
-				return fmt.Errorf("required key %s missing value", info.Key)
+				return nil, fmt.Errorf("required key %s missing value", info.Key)
 			}
 			continue
 		}
 
 		err := processField(value, info.Field)
 		if err != nil {
-			return &ParseError{
+			return nil, &ParseError{
 				KeyName:   info.Key,
 				FieldName: info.Name,
 				TypeName:  info.Field.Type().String(),
@@ -213,7 +219,12 @@ func Process(prefix string, spec interface{}) error {
 			}
 		}
 	}
+	return unsetDevDefaults, err
+}
 
+// Process populates the specified struct based on environment variables
+func Process(prefix string, spec interface{}) error {
+	_, err := ProcessWithDev(prefix, spec)
 	return err
 }
 

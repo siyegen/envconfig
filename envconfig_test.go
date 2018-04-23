@@ -7,10 +7,10 @@ package envconfig
 import (
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"testing"
 	"time"
-	"net/url"
 )
 
 type HonorDecodeInStruct struct {
@@ -52,6 +52,8 @@ type Specification struct {
 	MultiWordVarWithLowerCaseAlt string  `envconfig:"multi_word_var_with_lower_case_alt"`
 	NoPrefixWithAlt              string  `envconfig:"SERVICE_HOST"`
 	DefaultVar                   string  `default:"foobar"`
+	DevDefaultVar                string  `default:"127.0.0.1" dev:"True"`
+	DevDefaultVar2               string  `default:"11211" dev:"True"`
 	RequiredVar                  string  `required:"True"`
 	NoPrefixDefault              string  `envconfig:"BROKER" default:"127.0.0.1"`
 	RequiredDefault              string  `required:"true" default:"foo2bar"`
@@ -379,6 +381,42 @@ func TestBlankDefaultVar(t *testing.T) {
 
 	if *s.SomePointerWithDefault != "foo2baz" {
 		t.Errorf("expected %s, got %s", "foo2baz", *s.SomePointerWithDefault)
+	}
+}
+
+func TestDevDefault(t *testing.T) {
+	var s Specification
+	os.Clearenv()
+	os.Setenv("ENV_CONFIG_REQUIREDVAR", "requiredvalue")
+	os.Setenv("ENV_CONFIG_DEVDEFAULTVAR2", "6789")
+	unused, err := ProcessWithDev("env_config", &s)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	if s.DefaultVar != "foobar" {
+		t.Errorf("expected %s, got %s", "foobar", s.DefaultVar)
+	}
+
+	if *s.SomePointerWithDefault != "foo2baz" {
+		t.Errorf("expected %s, got %s", "foo2baz", *s.SomePointerWithDefault)
+	}
+
+	if s.DevDefaultVar != "127.0.0.1" {
+		t.Errorf("expected %s, got %s", "127.0.0.1", s.DevDefaultVar)
+	}
+
+	if s.DevDefaultVar2 != "6789" {
+		t.Errorf("expected %s, got %s", "127.0.0.1", s.DevDefaultVar2)
+	}
+
+	if len(unused) != 1 {
+		fmt.Printf("%+v\n", unused)
+		t.Errorf("expected %d, got %d", 1, len(unused))
+	}
+
+	if unused[0].Name != "DevDefaultVar" {
+		t.Errorf("expected %s, got %s", "DevDefaultVar", unused[0].Name)
 	}
 }
 
